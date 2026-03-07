@@ -238,3 +238,21 @@ else:
     for i in alerts["Ticker"]:
 
         st.success(f"BUY SIGNAL: {i}")
+
+st.subheader("Automated Market Scan")
+
+try:
+
+    import json
+
+    with open("market_scan.json") as f:
+
+        scan = json.load(f)
+
+    scan_df = pd.DataFrame(scan)
+
+    st.dataframe(scan_df)
+
+except:
+
+    st.write("Market scan not available yet")
