@@ -1,1 +1,39 @@
+name: Daily Liquidity Scan
 
+on:
+  schedule:
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+
+jobs:
+  run-model:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install packages
+      run: |
+        pip install pandas numpy requests
+
+    - name: Run liquidity model
+      env:
+        FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      run: |
+        python liquidity_model.py
+
+    - name: Commit results
+      run: |
+        git config --global user.name "bot"
+        git config --global user.email "bot@github.com"
+        git add liquidity_output.json
+        git commit -m "daily liquidity update"
+        git push
