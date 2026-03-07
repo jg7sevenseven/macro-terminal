@@ -35,11 +35,18 @@ jobs:
       run: |
         python market_scan.py
 
+    - name: Run Liquidity Heatmap
+      env:
+        FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      run: |
+        python liquidity_heatmap.py
+
     - name: Commit Results
       run: |
         git config --global user.name "github-actions"
         git config --global user.email "actions@github.com"
         git add liquidity_output.json
         git add market_scan.json
-        git commit -m "Daily macro and market scan update" || echo "No changes"
+        git add liquidity_heatmap.json
+        git commit -m "Daily macro update" || echo "No changes"
         git push
