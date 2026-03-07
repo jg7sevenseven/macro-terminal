@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import json
 
 st.set_page_config(layout="wide")
 
@@ -76,7 +77,7 @@ else:
     credit_signal = "Worsening"
 
 # -----------------------------
-# LIQUIDITY MODEL
+# LIQUIDITY MODEL (Internal)
 # -----------------------------
 
 score = 0
@@ -153,6 +154,38 @@ c3.metric("VIX",f"{vix:.2f}")
 c4.metric("Dollar Index",f"{dxy:.2f}")
 
 st.write("Credit Market:",credit_signal)
+
+# -----------------------------
+# GLOBAL LIQUIDITY INDEX
+# -----------------------------
+
+st.subheader("Global Liquidity Index")
+
+try:
+
+    with open("liquidity_output.json") as f:
+
+        liquidity_data = json.load(f)
+
+    col1, col2 = st.columns(2)
+
+    col1.metric(
+        "Global Liquidity Index",
+        round(liquidity_data["liquidity_index"],2)
+    )
+
+    col2.metric(
+        "Liquidity Regime",
+        liquidity_data["regime"]
+    )
+
+except:
+
+    st.warning("Liquidity model not updated yet")
+
+# -----------------------------
+# MARKET REGIME
+# -----------------------------
 
 st.subheader("Market Regime")
 
