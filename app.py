@@ -182,6 +182,30 @@ try:
 except:
 
     st.warning("Liquidity model not updated yet")
+st.subheader("Global Liquidity Heatmap")
+
+try:
+
+    with open("liquidity_heatmap.json") as f:
+
+        heat = json.load(f)
+
+    heat_df = pd.DataFrame(heat)
+
+    fig_heat = px.imshow(
+        heat_df[["3M Change %"]],
+        labels=dict(x="Liquidity Change",y="Indicator",color="%"),
+        y=heat_df["Indicator"],
+        title="3 Month Liquidity Change"
+    )
+
+    st.plotly_chart(fig_heat,use_container_width=True)
+
+    st.dataframe(heat_df)
+
+except:
+
+    st.write("Liquidity heatmap not available yet")
 
 # -----------------------------
 # MARKET REGIME
@@ -256,3 +280,4 @@ try:
 except:
 
     st.write("Market scan not available yet")
+
