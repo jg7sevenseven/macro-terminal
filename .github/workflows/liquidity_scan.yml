@@ -1,4 +1,4 @@
-name: Daily Liquidity Scan
+name: Daily Market Scan
 
 on:
   schedule:
@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
+
   run-model:
 
     runs-on: ubuntu-latest
@@ -18,22 +19,27 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: "3.11"
 
     - name: Install packages
       run: |
-        pip install pandas numpy requests
+        pip install pandas numpy requests yfinance
 
-    - name: Run liquidity model
+    - name: Run Liquidity Model
       env:
         FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       run: |
         python liquidity_model.py
 
-    - name: Commit results
+    - name: Run Market Scan
       run: |
-        git config --global user.name "bot"
-        git config --global user.email "bot@github.com"
+        python market_scan.py
+
+    - name: Commit Results
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "actions@github.com"
         git add liquidity_output.json
-        git commit -m "daily liquidity update"
+        git add market_scan.json
+        git commit -m "Daily macro and market scan update" || echo "No changes"
         git push
