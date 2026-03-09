@@ -11,7 +11,6 @@ st.title("Macro Liquidity Terminal")
 
 from datetime import datetime
 
-st.title("Macro Liquidity Terminal")
 
 # -----------------------------
 # MANUAL REFRESH
@@ -79,6 +78,76 @@ vix = prices["^VIX"].iloc[-1]
 dxy = prices["DX-Y.NYB"].iloc[-1]
 
 # -----------------------------
+# CREDIT MODEL
+# -----------------------------
+
+credit_ratio = prices["HYG"] / prices["LQD"]
+
+credit_change = credit_ratio.pct_change(20).iloc[-1]
+
+if credit_change > 0:
+    credit_signal = "Improving"
+else:
+    credit_signal = "Worsening"
+
+# -----------------------------
+# GLOBAL RISK GAUGE MODEL
+# -----------------------------
+
+risk_score = 0
+
+# VIX signal
+if vix < 18:
+    risk_score += 1
+elif vix > 25:
+    risk_score -= 1
+
+# Credit spreads signal
+if credit_change > 0:
+    risk_score += 1
+else:
+    risk_score -= 1
+
+# Dollar trend
+dxy_change = prices["DX-Y.NYB"].pct_change(20).iloc[-1]
+
+if dxy_change < 0:
+    risk_score += 1
+else:
+    risk_score -= 1
+
+# Liquidity index signal
+liq = None
+
+try:
+    with open("liquidity_output.json") as f:
+        liquidity_data = json.load(f)
+        liq = liquidity_data["liquidity_index"]
+
+        if liq > 0.5:
+            risk_score += 1
+        elif liq < -0.5:
+            risk_score -= 1
+
+except:
+    pass
+
+
+# -----------------------------
+# RISK REGIME CLASSIFICATION
+# -----------------------------
+
+if risk_score >= 2:
+    risk_regime = "GREEN"
+
+elif risk_score <= -2:
+    risk_regime = "RED"
+
+else:
+    risk_regime = "YELLOW"
+
+
+# -----------------------------
 # GLOBAL RISK GAUGE DISPLAY
 # -----------------------------
 
@@ -98,7 +167,8 @@ elif risk_regime == "RED":
 else:
     st.warning("🟡 YELLOW — Neutral")
 
-rivers = pd.DataFrame({
+
+drivers = pd.DataFrame({
 "Indicator":[
 "VIX",
 "Credit Trend",
@@ -114,19 +184,6 @@ liq if liq is not None else "N/A"
 })
 
 st.dataframe(drivers, use_container_width=True)
-
-# -----------------------------
-# CREDIT MODEL
-# -----------------------------
-
-credit_ratio = prices["HYG"] / prices["LQD"]
-
-credit_change = credit_ratio.pct_change(20).iloc[-1]
-
-if credit_change > 0:
-    credit_signal = "Improving"
-else:
-    credit_signal = "Worsening"
 
 # -----------------------------
 # LIQUIDITY MODEL (Internal)
@@ -332,5 +389,6 @@ try:
 except:
 
     st.write("Market scan not available yet")
+
 
 
