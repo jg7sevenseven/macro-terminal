@@ -1,56 +1,41 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import json
+from datetime import datetime
 
 st.set_page_config(layout="wide")
 
 st.title("Macro Liquidity Terminal")
 
-from datetime import datetime
-
-
-# -----------------------------
-# MANUAL REFRESH
-# -----------------------------
+# --------------------------------
+# REFRESH BUTTON
+# --------------------------------
 
 if st.button("🔄 Refresh Market Data"):
     st.cache_data.clear()
     st.rerun()
 
-# Last update timestamp
-st.caption(f"Last market data refresh: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+st.caption(
+    f"Last market data refresh: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+)
 
-# -----------------------------
+# --------------------------------
 # CONFIG
-# -----------------------------
+# --------------------------------
 
-ETF_LIST = [
-"QQQ",
-"XLU",
-"IWM",
-"KBE",
-"SPY"
-]
+ETF_LIST = ["QQQ","XLU","IWM","KBE","SPY"]
 
-MACRO = [
-"^TNX",
-"^IRX",
-"^VIX",
-"DX-Y.NYB",
-"HYG",
-"LQD"
-]
+MACRO = ["^TNX","^IRX","^VIX","DX-Y.NYB","HYG","LQD"]
 
 SYMBOLS = ETF_LIST + MACRO
 
-# -----------------------------
+# --------------------------------
 # DATA DOWNLOAD
-# -----------------------------
+# --------------------------------
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=600)
 def get_data():
 
     data = yf.download(
@@ -64,15 +49,15 @@ def get_data():
 
 data = get_data()
 
-prices = data["Close"]
-volume = data["Volume"]
 if data.empty:
     st.error("Market data failed to load.")
     st.stop()
 
-# -----------------------------
+prices = data["Close"]
+
+# --------------------------------
 # MACRO DATA
-# -----------------------------
+# --------------------------------
 
 ten_year = prices["^TNX"].iloc[-1] / 10
 three_month = prices["^IRX"].iloc[-1] / 10
@@ -80,38 +65,52 @@ yield_curve = ten_year - three_month
 vix = prices["^VIX"].iloc[-1]
 dxy = prices["DX-Y.NYB"].iloc[-1]
 
-# -----------------------------
+# --------------------------------
 # CREDIT MODEL
-# -----------------------------
+# --------------------------------
 
 credit_ratio = prices["HYG"] / prices["LQD"]
 
 credit_change = credit_ratio.pct_change(20).iloc[-1]
 
-if credit_change > 0:
-    credit_signal = "Improving"
-else:
-    credit_signal = "Worsening"
+credit_signal = "Improving" if credit_change > 0 else "Worsening"
 
-# -----------------------------
-# GLOBAL RISK GAUGE MODEL
-# -----------------------------
+# --------------------------------
+# LIQUIDITY INDEX
+# --------------------------------
+
+liq = None
+
+try:
+
+    with open("liquidity_output.json") as f:
+
+        liquidity_data = json.load(f)
+
+        liq = liquidity_data["liquidity_index"]
+
+        liquidity_regime = liquidity_data["regime"]
+
+except:
+
+    liquidity_regime = "Unavailable"
+
+# --------------------------------
+# GLOBAL RISK GAUGE
+# --------------------------------
 
 risk_score = 0
 
-# VIX signal
 if vix < 18:
     risk_score += 1
 elif vix > 25:
     risk_score -= 1
 
-# Credit spreads signal
 if credit_change > 0:
     risk_score += 1
 else:
     risk_score -= 1
 
-# Dollar trend
 dxy_change = prices["DX-Y.NYB"].pct_change(20).iloc[-1]
 
 if dxy_change < 0:
@@ -119,142 +118,24 @@ if dxy_change < 0:
 else:
     risk_score -= 1
 
-# Liquidity index signal
-liq = None
+if liq is not None:
 
-try:
-    with open("liquidity_output.json") as f:
-        liquidity_data = json.load(f)
-        liq = liquidity_data["liquidity_index"]
+    if liq > 0.5:
+        risk_score += 1
 
-        if liq > 0.5:
-            risk_score += 1
-        elif liq < -0.5:
-            risk_score -= 1
-
-except:
-    pass
-
-
-# -----------------------------
-# RISK REGIME CLASSIFICATION
-# -----------------------------
+    elif liq < -0.5:
+        risk_score -= 1
 
 if risk_score >= 2:
     risk_regime = "GREEN"
-
 elif risk_score <= -2:
     risk_regime = "RED"
-
 else:
     risk_regime = "YELLOW"
 
-
-# -----------------------------
-# GLOBAL RISK GAUGE DISPLAY
-# -----------------------------
-
-st.subheader("Global Risk Gauge")
-
-st.caption(
-"Composite indicator summarizing market risk conditions using volatility, "
-"credit spreads, liquidity, and dollar strength."
-)
-
-if risk_regime == "GREEN":
-    st.success("🟢 GREEN — Risk On")
-
-elif risk_regime == "RED":
-    st.error("🔴 RED — Risk Off")
-
-else:
-    st.warning("🟡 YELLOW — Neutral")
-
-
-drivers = pd.DataFrame({
-"Indicator":[
-"VIX",
-"Credit Trend",
-"Dollar Trend",
-"Liquidity Index"
-],
-"Status":[
-round(vix,2),
-credit_signal,
-"Falling" if dxy_change < 0 else "Rising",
-liq if liq is not None else "N/A"
-]
-})
-
-st.dataframe(drivers, use_container_width=True)
-
-# -----------------------------
-# LIQUIDITY MODEL (Internal)
-# -----------------------------
-
-score = 0
-
-if vix < 20:
-    score += 1
-
-if yield_curve > 0:
-    score += 1
-
-if credit_change > 0:
-    score += 1
-
-if ten_year < 4.25:
-    score += 1
-
-if score >= 3:
-    regime = "RISK ON"
-elif score == 2:
-    regime = "NEUTRAL"
-else:
-    regime = "RISK OFF"
-
-# -----------------------------
-# ETF SIGNALS
-# -----------------------------
-
-signals = []
-
-ret20 = prices.pct_change(20)
-
-spy_ret = ret20["SPY"].iloc[-1]
-
-for t in ETF_LIST:
-
-    price = prices[t].iloc[-1]
-
-    ma50 = prices[t].rolling(50).mean().iloc[-1]
-
-    rs = ret20[t].iloc[-1] - spy_ret
-
-    if price > ma50 and rs > 0:
-
-        signal = "BUY"
-
-    elif price > ma50:
-
-        signal = "HOLD"
-
-    else:
-
-        signal = "AVOID"
-
-    signals.append({
-        "Ticker":t,
-        "Price":round(price,2),
-        "Relative Strength %":round(rs*100,2),
-        "Signal":signal
-    })
-
-signal_df = pd.DataFrame(signals)
-
-# -----------------------------
+# --------------------------------
 # DASHBOARD
-# -----------------------------
+# --------------------------------
 
 st.header("Macro Environment")
 
@@ -267,33 +148,62 @@ c4.metric("Dollar Index",f"{dxy:.2f}")
 
 st.write("Credit Market:",credit_signal)
 
-# -----------------------------
+# --------------------------------
+# RISK GAUGE
+# --------------------------------
+
+st.subheader("Global Risk Gauge")
+
+if risk_regime == "GREEN":
+    st.success("🟢 GREEN — Risk On")
+
+elif risk_regime == "RED":
+    st.error("🔴 RED — Risk Off")
+
+else:
+    st.warning("🟡 YELLOW — Neutral")
+
+drivers = pd.DataFrame({
+
+"Indicator":[
+"VIX",
+"Credit Trend",
+"Dollar Trend",
+"Liquidity Index"
+],
+
+"Status":[
+round(vix,2),
+credit_signal,
+"Falling" if dxy_change < 0 else "Rising",
+liq if liq else "N/A"
+]
+
+})
+
+st.dataframe(drivers,use_container_width=True)
+
+# --------------------------------
 # GLOBAL LIQUIDITY INDEX
-# -----------------------------
+# --------------------------------
 
 st.subheader("Global Liquidity Index")
 
-try:
+if liq:
 
-    with open("liquidity_output.json") as f:
+    col1,col2 = st.columns(2)
 
-        liquidity_data = json.load(f)
+    col1.metric("Liquidity Index",round(liq,2))
+    col2.metric("Liquidity Regime",liquidity_regime)
 
-    col1, col2 = st.columns(2)
-
-    col1.metric(
-        "Global Liquidity Index",
-        round(liquidity_data["liquidity_index"],2)
-    )
-
-    col2.metric(
-        "Liquidity Regime",
-        liquidity_data["regime"]
-    )
-
-except:
+else:
 
     st.warning("Liquidity model not updated yet")
+
+# --------------------------------
+# LIQUIDITY HEATMAP
+# --------------------------------
+
 st.subheader("Global Liquidity Heatmap")
 
 try:
@@ -304,40 +214,61 @@ try:
 
     heat_df = pd.DataFrame(heat)
 
-    fig_heat = px.imshow(
+    fig = px.imshow(
         heat_df[["3M Change %"]],
-        labels=dict(x="Liquidity Change",y="Indicator",color="%"),
-        y=heat_df["Indicator"],
-        title="3 Month Liquidity Change"
+        labels=dict(color="%"),
+        y=heat_df["Indicator"]
     )
 
-    st.plotly_chart(fig_heat,use_container_width=True)
-
-    st.dataframe(heat_df)
+    st.plotly_chart(fig,use_container_width=True)
 
 except:
 
-    st.write("Liquidity heatmap not available yet")
+    st.warning("Liquidity heatmap not available yet")
 
-# -----------------------------
-# MARKET REGIME
-# -----------------------------
+# --------------------------------
+# ETF SIGNALS
+# --------------------------------
 
-st.subheader("Market Regime")
+ret20 = prices.pct_change(20)
 
-st.write(regime)
+spy_ret = ret20["SPY"].iloc[-1]
 
-# -----------------------------
-# ETF SIGNAL TABLE
-# -----------------------------
+signals = []
+
+for t in ETF_LIST:
+
+    price = prices[t].iloc[-1]
+
+    ma50 = prices[t].rolling(50).mean().iloc[-1]
+
+    rs = ret20[t].iloc[-1] - spy_ret
+
+    if price > ma50 and rs > 0:
+        signal = "BUY"
+    elif price > ma50:
+        signal = "HOLD"
+    else:
+        signal = "AVOID"
+
+    signals.append({
+
+        "Ticker":t,
+        "Price":round(price,2),
+        "Relative Strength %":round(rs*100,2),
+        "Signal":signal
+
+    })
+
+signal_df = pd.DataFrame(signals)
 
 st.subheader("ETF Trading Signals")
 
 st.dataframe(signal_df)
 
-# -----------------------------
+# --------------------------------
 # CREDIT CHART
-# -----------------------------
+# --------------------------------
 
 st.subheader("Credit Market Risk")
 
@@ -345,9 +276,9 @@ fig = px.line(credit_ratio,title="HYG / LQD Ratio")
 
 st.plotly_chart(fig,use_container_width=True)
 
-# -----------------------------
+# --------------------------------
 # RELATIVE PERFORMANCE
-# -----------------------------
+# --------------------------------
 
 st.subheader("Relative Performance")
 
@@ -357,29 +288,13 @@ fig2 = px.bar(perf,title="20 Day Relative Performance")
 
 st.plotly_chart(fig2,use_container_width=True)
 
-# -----------------------------
-# TRADE ALERTS
-# -----------------------------
-
-st.subheader("Alerts")
-
-alerts = signal_df[signal_df["Signal"]=="BUY"]
-
-if alerts.shape[0] == 0:
-
-    st.write("No buy signals")
-
-else:
-
-    for i in alerts["Ticker"]:
-
-        st.success(f"BUY SIGNAL: {i}")
+# --------------------------------
+# MARKET SCAN
+# --------------------------------
 
 st.subheader("Automated Market Scan")
 
 try:
-
-    import json
 
     with open("market_scan.json") as f:
 
@@ -391,8 +306,4 @@ try:
 
 except:
 
-    st.write("Market scan not available yet")
-
-
-
-
+    st.warning("Market scan not available yet")
