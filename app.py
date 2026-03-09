@@ -66,6 +66,9 @@ data = get_data()
 
 prices = data["Close"]
 volume = data["Volume"]
+if data.empty:
+    st.error("Market data failed to load.")
+    st.stop()
 
 # -----------------------------
 # MACRO DATA
@@ -389,6 +392,7 @@ try:
 except:
 
     st.write("Market scan not available yet")
+
 
 
 
