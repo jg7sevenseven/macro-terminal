@@ -9,6 +9,21 @@ st.set_page_config(layout="wide")
 
 st.title("Macro Liquidity Terminal")
 
+from datetime import datetime
+
+st.title("Macro Liquidity Terminal")
+
+# -----------------------------
+# MANUAL REFRESH
+# -----------------------------
+
+if st.button("🔄 Refresh Market Data"):
+    st.cache_data.clear()
+    st.rerun()
+
+# Last update timestamp
+st.caption(f"Last market data refresh: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+
 # -----------------------------
 # CONFIG
 # -----------------------------
@@ -62,6 +77,43 @@ three_month = prices["^IRX"].iloc[-1] / 10
 yield_curve = ten_year - three_month
 vix = prices["^VIX"].iloc[-1]
 dxy = prices["DX-Y.NYB"].iloc[-1]
+
+# -----------------------------
+# GLOBAL RISK GAUGE DISPLAY
+# -----------------------------
+
+st.subheader("Global Risk Gauge")
+
+st.caption(
+"Composite indicator summarizing market risk conditions using volatility, "
+"credit spreads, liquidity, and dollar strength."
+)
+
+if risk_regime == "GREEN":
+    st.success("🟢 GREEN — Risk On")
+
+elif risk_regime == "RED":
+    st.error("🔴 RED — Risk Off")
+
+else:
+    st.warning("🟡 YELLOW — Neutral")
+
+rivers = pd.DataFrame({
+"Indicator":[
+"VIX",
+"Credit Trend",
+"Dollar Trend",
+"Liquidity Index"
+],
+"Status":[
+round(vix,2),
+credit_signal,
+"Falling" if dxy_change < 0 else "Rising",
+liq if liq is not None else "N/A"
+]
+})
+
+st.dataframe(drivers, use_container_width=True)
 
 # -----------------------------
 # CREDIT MODEL
@@ -280,4 +332,5 @@ try:
 except:
 
     st.write("Market scan not available yet")
+
 
